@@ -1,0 +1,1723 @@
+--[[
+    ╔══════════════════════════════════════════════════════════════════════════════╗
+    ║                    AETHER UI v2.0 — EXECUTOR EDITION                         ║
+    ║           Single-file | loadstring-ready | No Studio dependencies           ║
+    ║                                                                              ║
+    ║  Usage:                                                                      ║
+    ║    local Aether = loadstring(game:HttpGet("YOUR_RAW_URL"))()                ║
+    ║    local UI = Aether.new({Title = "My Script", Subtitle = "v1.0"})           ║
+    ║                                                                              ║
+    ║  Or paste entire file and:                                                   ║
+    ║    local Aether = loadstring(source)()                                        ║
+    ╚══════════════════════════════════════════════════════════════════════════════╝
+--]]
+
+local Aether = {}
+Aether.__index = Aether
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════════════════════════════════════════════
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- COLOR PALETTE
+-- ═══════════════════════════════════════════════════════════════════════════════
+Aether.Colors = {
+    Background    = Color3.fromRGB(15, 17, 20),
+    Surface       = Color3.fromRGB(25, 28, 32),
+    SurfaceHover  = Color3.fromRGB(35, 38, 44),
+    SurfaceActive = Color3.fromRGB(45, 48, 56),
+    Border        = Color3.fromRGB(50, 55, 65),
+    TextPrimary   = Color3.fromRGB(240, 242, 245),
+    TextSecondary = Color3.fromRGB(160, 165, 175),
+    TextMuted     = Color3.fromRGB(90, 95, 105),
+    AccentOrange  = Color3.fromRGB(255, 110, 50),
+    AccentBlue    = Color3.fromRGB(60, 160, 255),
+    AccentPurple  = Color3.fromRGB(180, 80, 220),
+    Success       = Color3.fromRGB(50, 215, 100),
+    Danger        = Color3.fromRGB(255, 70, 70),
+    Warning       = Color3.fromRGB(255, 200, 50),
+}
+
+local C = Aether.Colors
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- UTILITY FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════════════════════
+function Aether.Tween(instance, duration, style, direction, properties)
+    local info = TweenInfo.new(duration, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out)
+    local tween = TweenService:Create(instance, info, properties)
+    tween:Play()
+    return tween
+end
+
+function Aether.TweenHover(instance, properties)
+    return Aether.Tween(instance, 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, properties)
+end
+
+function Aether.New(className, properties, parent)
+    local inst = Instance.new(className)
+    for k, v in pairs(properties or {}) do
+        inst[k] = v
+    end
+    if parent then inst.Parent = parent end
+    return inst
+end
+
+local function New(c, p, par) return Aether.New(c, p, par) end
+
+-- Safe GUI parent for executors
+local function getSafeParent()
+    if gethui then return gethui() end
+    if syn and syn.protect_gui then
+        local gui = Instance.new("ScreenGui")
+        syn.protect_gui(gui)
+        gui.Parent = game:GetService("CoreGui")
+        return gui
+    end
+    local success, result = pcall(function() return game:GetService("CoreGui") end)
+    if success then
+        local gui = Instance.new("ScreenGui")
+        gui.Parent = result
+        return gui
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- Ripple effect
+local function ripple(parent, x, y)
+    local ripple = New("Frame", {
+        Name = "Ripple",
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.7,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, x - 5, 0, y - 5),
+        Size = UDim2.new(0, 10, 0, 10),
+        ZIndex = parent.ZIndex + 5,
+    }, parent)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, ripple)
+
+    local maxSize = math.max(parent.AbsoluteSize.X, parent.AbsoluteSize.Y) * 2.5
+    Aether.Tween(ripple, 0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, {
+        Size = UDim2.new(0, maxSize, 0, maxSize),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, x - maxSize/2, 0, y - maxSize/2)
+    })
+    task.delay(0.6, function() if ripple then ripple:Destroy() end end)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- ELEMENTS MODULE (INLINE — no external dependencies)
+-- ═══════════════════════════════════════════════════════════════════════════════
+local Elements = {}
+
+function Elements.Section(parent, title)
+    local section = New("Frame", {
+        Name = title .. "Section",
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        ZIndex = 10,
+    }, parent)
+    New("UICorner", { CornerRadius = UDim.new(0, 6) }, section)
+    New("UIStroke", { Color = C.Border, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, section)
+
+    local header = New("Frame", {
+        Name = "Header",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 36),
+        ZIndex = 11,
+    }, section)
+
+    New("TextLabel", {
+        Name = "Title",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 14, 0, 0),
+        Size = UDim2.new(1, -28, 1, 0),
+        Font = Enum.Font.GothamBold,
+        Text = title,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 12,
+    }, header)
+
+    New("Frame", {
+        Name = "Line",
+        BackgroundColor3 = C.Border,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 14, 1, -1),
+        Size = UDim2.new(1, -28, 0, 1),
+        ZIndex = 11,
+    }, header)
+
+    local content = New("Frame", {
+        Name = "Content",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 36),
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        ZIndex = 10,
+    }, section)
+
+    New("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8) }, content)
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 14),
+        PaddingRight = UDim.new(0, 14),
+        PaddingTop = UDim.new(0, 10),
+        PaddingBottom = UDim.new(0, 14),
+    }, content)
+
+    return content
+end
+
+function Elements.Toggle(parent, text, callback)
+    callback = callback or function() end
+    local toggled = false
+    local interacting = false
+
+    local frame = New("Frame", {
+        Name = text .. "Toggle",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 32),
+        ZIndex = 15,
+    }, parent)
+
+    local label = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -60, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = text,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local track = New("Frame", {
+        BackgroundColor3 = C.Border,
+        BorderSizePixel = 0,
+        Position = UDim2.new(1, -52, 0.5, -10),
+        Size = UDim2.new(0, 44, 0, 20),
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, track)
+
+    local circle = New("Frame", {
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 2, 0.5, -8),
+        Size = UDim2.new(0, 16, 0, 16),
+        ZIndex = 17,
+    }, track)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, circle)
+
+    local clickArea = New("TextButton", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        Text = "",
+        ZIndex = 18,
+    }, frame)
+
+    local function setState(state)
+        if interacting then return end
+        interacting = true
+        toggled = state
+        local dur = 0.2
+
+        if toggled then
+            Aether.Tween(track, dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, {BackgroundColor3 = C.Success})
+            Aether.Tween(circle, dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, {Position = UDim2.new(1, -18, 0.5, -8)})
+            Aether.Tween(label, dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, {TextColor3 = C.Success})
+        else
+            Aether.Tween(track, dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, {BackgroundColor3 = C.Border})
+            Aether.Tween(circle, dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, {Position = UDim2.new(0, 2, 0.5, -8)})
+            Aether.Tween(label, dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, {TextColor3 = C.TextPrimary})
+        end
+
+        task.delay(dur, function() interacting = false end)
+        pcall(callback, toggled)
+    end
+
+    clickArea.MouseButton1Click:Connect(function() setState(not toggled) end)
+    return {Set = setState, Get = function() return toggled end, Frame = frame}
+end
+
+function Elements.Slider(parent, text, min, max, default, callback)
+    min, max, default = min or 0, max or 100, default or min or 0
+    callback = callback or function() end
+    local dragging = false
+
+    local frame = New("Frame", {
+        Name = text .. "Slider",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 48),
+        ZIndex = 15,
+    }, parent)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.55, 0, 0, 20),
+        Font = Enum.Font.Gotham,
+        Text = text,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local valueBox = New("TextBox", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(1, -55, 0, 0),
+        Size = UDim2.new(0, 50, 0, 20),
+        Font = Enum.Font.Gotham,
+        Text = tostring(default),
+        TextColor3 = C.TextPrimary,
+        TextSize = 12,
+        ClearTextOnFocus = false,
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, valueBox)
+    local boxStroke = New("UIStroke", { Color = C.Border, Thickness = 1 }, valueBox)
+
+    local track = New("Frame", {
+        BackgroundColor3 = C.Border,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 0, 0, 32),
+        Size = UDim2.new(1, 0, 0, 4),
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, track)
+
+    local fill = New("Frame", {
+        BackgroundColor3 = C.AccentOrange,
+        BorderSizePixel = 0,
+        Size = UDim2.new((default - min) / (max - min), 0, 1, 0),
+        ZIndex = 17,
+    }, track)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, fill)
+
+    local thumb = New("Frame", {
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BorderSizePixel = 0,
+        Position = UDim2.new((default - min) / (max - min), -7, 0.5, -7),
+        Size = UDim2.new(0, 14, 0, 14),
+        ZIndex = 18,
+    }, track)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, thumb)
+    New("UIStroke", { Color = C.AccentOrange, Thickness = 2.5 }, thumb)
+
+    local function updateFromInput(input)
+        local scale = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local value = math.floor(scale * (max - min) + min)
+        fill.Size = UDim2.new(scale, 0, 1, 0)
+        thumb.Position = UDim2.new(scale, -7, 0.5, -7)
+        valueBox.Text = tostring(value)
+        pcall(callback, value)
+    end
+
+    thumb.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then updateFromInput(input) end
+    end)
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then updateFromInput(input) end
+    end)
+    valueBox.Focused:Connect(function() Aether.Tween(boxStroke, 0.2, nil, nil, {Color = C.AccentOrange}) end)
+    valueBox.FocusLost:Connect(function()
+        Aether.Tween(boxStroke, 0.2, nil, nil, {Color = C.Border})
+        local num = math.clamp(tonumber(valueBox.Text) or default, min, max)
+        local scale = (num - min) / (max - min)
+        fill.Size = UDim2.new(scale, 0, 1, 0)
+        thumb.Position = UDim2.new(scale, -7, 0.5, -7)
+        valueBox.Text = tostring(num)
+        pcall(callback, num)
+    end)
+
+    return {Set = function(v)
+        v = math.clamp(v, min, max)
+        local scale = (v - min) / (max - min)
+        fill.Size = UDim2.new(scale, 0, 1, 0)
+        thumb.Position = UDim2.new(scale, -7, 0.5, -7)
+        valueBox.Text = tostring(v)
+    end, Get = function() return tonumber(valueBox.Text) or default end, Frame = frame}
+end
+
+function Elements.Dropdown(parent, text, options, default, callback)
+    options = options or {}
+    default = default or 1
+    callback = callback or function() end
+    local selected = options[default] or options[1] or "None"
+    local open = false
+
+    local frame = New("Frame", {
+        Name = text .. "Dropdown",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 32),
+        ZIndex = 20,
+        ClipsDescendants = false,
+    }, parent)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.45, 0, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = text,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 21,
+    }, frame)
+
+    local btn = New("TextButton", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0.48, 0, 0, 0),
+        Size = UDim2.new(0.52, 0, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = selected,
+        TextColor3 = C.TextPrimary,
+        TextSize = 12,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 21,
+        AutoButtonColor = false,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, btn)
+    local btnStroke = New("UIStroke", { Color = C.Border, Thickness = 1 }, btn)
+
+    local arrow = New("ImageLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -22, 0.5, -5),
+        Size = UDim2.new(0, 10, 0, 10),
+        Image = "rbxassetid://7072706663",
+        ImageColor3 = C.TextSecondary,
+        ZIndex = 22,
+    }, btn)
+
+    local listFrame = New("Frame", {
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0.48, 0, 0, 34),
+        Size = UDim2.new(0.52, 0, 0, 0),
+        ZIndex = 25,
+        Visible = false,
+        ClipsDescendants = true,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 6) }, listFrame)
+    New("UIStroke", { Color = C.Border, Thickness = 1 }, listFrame)
+    New("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 1) }, listFrame)
+    New("UIPadding", { PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4) }, listFrame)
+
+    for i, opt in ipairs(options) do
+        local optBtn = New("TextButton", {
+            BackgroundColor3 = C.Surface,
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Size = UDim2.new(1, -8, 0, 28),
+            Position = UDim2.new(0, 4, 0, 0),
+            Font = Enum.Font.Gotham,
+            Text = opt,
+            TextColor3 = (opt == selected) and C.AccentOrange or C.TextSecondary,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 26,
+            AutoButtonColor = false,
+        }, listFrame)
+
+        optBtn.MouseEnter:Connect(function()
+            Aether.Tween(optBtn, 0.15, nil, nil, {BackgroundTransparency = 0.5})
+            optBtn.TextColor3 = C.TextPrimary
+        end)
+        optBtn.MouseLeave:Connect(function()
+            Aether.Tween(optBtn, 0.15, nil, nil, {BackgroundTransparency = 1})
+            if opt ~= selected then optBtn.TextColor3 = C.TextSecondary end
+        end)
+        optBtn.MouseButton1Click:Connect(function()
+            selected = opt
+            btn.Text = selected
+            open = false
+            Aether.Tween(listFrame, 0.2, nil, nil, {Size = UDim2.new(0.52, 0, 0, 0)})
+            Aether.Tween(arrow, 0.2, nil, nil, {Rotation = 0})
+            Aether.Tween(btnStroke, 0.2, nil, nil, {Color = C.Border})
+            task.delay(0.2, function() listFrame.Visible = false end)
+            for _, child in ipairs(listFrame:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child.TextColor3 = (child.Text == selected) and C.AccentOrange or C.TextSecondary
+                end
+            end
+            pcall(callback, selected)
+        end)
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        open = not open
+        if open then
+            listFrame.Visible = true
+            local height = math.min(#options * 29 + 8, 220)
+            Aether.Tween(listFrame, 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, {Size = UDim2.new(0.52, 0, 0, height)})
+            Aether.Tween(arrow, 0.2, nil, nil, {Rotation = 180})
+            Aether.Tween(btnStroke, 0.2, nil, nil, {Color = C.AccentOrange})
+        else
+            Aether.Tween(listFrame, 0.2, nil, nil, {Size = UDim2.new(0.52, 0, 0, 0)})
+            Aether.Tween(arrow, 0.2, nil, nil, {Rotation = 0})
+            Aether.Tween(btnStroke, 0.2, nil, nil, {Color = C.Border})
+            task.delay(0.2, function() listFrame.Visible = false end)
+        end
+    end)
+
+    return {Set = function(v) selected = v; btn.Text = selected; pcall(callback, selected) end,
+            Get = function() return selected end, Frame = frame}
+end
+
+function Elements.Button(parent, text, callback, style)
+    callback = callback or function() end
+    style = style or "primary"
+
+    local btn = New("TextButton", {
+        BackgroundColor3 = (style == "primary") and C.AccentOrange or (style == "danger") and C.Danger or C.Surface,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 34),
+        Font = Enum.Font.GothamBold,
+        Text = text,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        ZIndex = 15,
+        AutoButtonColor = false,
+    }, parent)
+    New("UICorner", { CornerRadius = UDim.new(0, 6) }, btn)
+
+    if style == "primary" then
+        local gradient = New("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, C.AccentOrange),
+                ColorSequenceKeypoint.new(1, C.AccentPurple),
+            }),
+            Rotation = 45,
+        }, btn)
+        btn.MouseEnter:Connect(function()
+            Aether.Tween(gradient, 0.2, nil, nil, {Rotation = 90})
+            Aether.Tween(btn, 0.2, nil, nil, {BackgroundColor3 = C.AccentPurple})
+        end)
+        btn.MouseLeave:Connect(function()
+            Aether.Tween(gradient, 0.2, nil, nil, {Rotation = 45})
+            Aether.Tween(btn, 0.2, nil, nil, {BackgroundColor3 = C.AccentOrange})
+        end)
+    else
+        local stroke = New("UIStroke", { Color = (style == "danger") and C.Danger or C.Border, Thickness = 1 }, btn)
+        btn.MouseEnter:Connect(function()
+            Aether.Tween(btn, 0.2, nil, nil, {BackgroundColor3 = C.SurfaceHover})
+            if stroke then Aether.Tween(stroke, 0.2, nil, nil, {Color = C.TextSecondary}) end
+        end)
+        btn.MouseLeave:Connect(function()
+            Aether.Tween(btn, 0.2, nil, nil, {BackgroundColor3 = (style == "danger") and C.Danger or C.Surface})
+            if stroke then Aether.Tween(stroke, 0.2, nil, nil, {Color = (style == "danger") and C.Danger or C.Border}) end
+        end)
+    end
+
+    btn.MouseButton1Down:Connect(function(x, y)
+        Aether.Tween(btn, 0.05, nil, nil, {Size = UDim2.new(1, 0, 0, 32)})
+        ripple(btn, x, y)
+    end)
+    btn.MouseButton1Up:Connect(function()
+        Aether.Tween(btn, 0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out, {Size = UDim2.new(1, 0, 0, 34)})
+    end)
+    btn.MouseButton1Click:Connect(function() pcall(callback) end)
+
+    return {Frame = btn}
+end
+
+function Elements.TextBox(parent, text, placeholder, callback)
+    callback = callback or function() end
+
+    local frame = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 32),
+        ZIndex = 15,
+    }, parent)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.4, 0, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = text,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local box = New("TextBox", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0.42, 0, 0, 0),
+        Size = UDim2.new(0.58, 0, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = "",
+        PlaceholderText = placeholder or "...",
+        PlaceholderColor3 = C.TextMuted,
+        TextColor3 = C.TextPrimary,
+        TextSize = 12,
+        ClearTextOnFocus = false,
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, box)
+    local stroke = New("UIStroke", { Color = C.Border, Thickness = 1 }, box)
+
+    box.Focused:Connect(function() Aether.Tween(stroke, 0.2, nil, nil, {Color = C.AccentOrange}) end)
+    box.FocusLost:Connect(function()
+        Aether.Tween(stroke, 0.2, nil, nil, {Color = C.Border})
+        pcall(callback, box.Text)
+    end)
+
+    return {Set = function(v) box.Text = v end, Get = function() return box.Text end, Frame = frame}
+end
+
+function Elements.KeyPicker(parent, text, defaultKey, callback)
+    callback = callback or function() end
+    local key = defaultKey and defaultKey.Name or "None"
+    local listening = false
+
+    local frame = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 32),
+        ZIndex = 15,
+    }, parent)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.55, 0, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = text,
+        TextColor3 = C.TextPrimary,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local keyBtn = New("TextButton", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0.58, 0, 0, 0),
+        Size = UDim2.new(0.42, 0, 1, 0),
+        Font = Enum.Font.GothamBold,
+        Text = key,
+        TextColor3 = C.AccentOrange,
+        TextSize = 12,
+        ZIndex = 16,
+        AutoButtonColor = false,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, keyBtn)
+    local stroke = New("UIStroke", { Color = C.Border, Thickness = 1 }, keyBtn)
+
+    keyBtn.MouseEnter:Connect(function() Aether.Tween(stroke, 0.2, nil, nil, {Color = C.AccentOrange}) end)
+    keyBtn.MouseLeave:Connect(function()
+        if not listening then Aether.Tween(stroke, 0.2, nil, nil, {Color = C.Border}) end
+    end)
+
+    keyBtn.MouseButton1Click:Connect(function()
+        if listening then return end
+        listening = true
+        keyBtn.Text = "..."
+        keyBtn.TextColor3 = C.Warning
+        Aether.Tween(stroke, 0.2, nil, nil, {Color = C.Warning})
+
+        local conn
+        conn = UserInputService.InputBegan:Connect(function(input, gpe)
+            if gpe then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                key = input.KeyCode.Name
+                keyBtn.Text = key
+                keyBtn.TextColor3 = C.AccentOrange
+                Aether.Tween(stroke, 0.2, nil, nil, {Color = C.Border})
+                listening = false
+                if conn then conn:Disconnect() end
+            end
+        end)
+    end)
+
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if input.KeyCode.Name == key and not listening then pcall(callback) end
+    end)
+
+    return {Get = function() return key end, Frame = frame}
+end
+
+function Elements.Label(parent, text, textColor)
+    return New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 20),
+        Font = Enum.Font.Gotham,
+        Text = text,
+        TextColor3 = textColor or C.TextSecondary,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextWrapped = true,
+        ZIndex = 15,
+    }, parent)
+end
+
+function Elements.Separator(parent)
+    return New("Frame", {
+        BackgroundColor3 = C.Border,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 1),
+        ZIndex = 15,
+    }, parent)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- MUSIC PLAYER (INLINE)
+-- ═══════════════════════════════════════════════════════════════════════════════
+local MusicPlayer = {}
+MusicPlayer.__index = MusicPlayer
+
+function MusicPlayer.new(parent)
+    local self = setmetatable({}, MusicPlayer)
+    self._playlist = {}
+    self._currentTrack = 0
+    self._isPlaying = false
+    self._sound = nil
+    self._connections = {}
+
+    local frame = New("Frame", {
+        Name = "MusicPlayer",
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 300),
+        ZIndex = 15,
+    }, parent)
+    New("UICorner", { CornerRadius = UDim.new(0, 8) }, frame)
+    New("UIStroke", { Color = C.Border, Thickness = 1 }, frame)
+
+    local artArea = New("Frame", {
+        Name = "VisualizerArea",
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 15, 0, 15),
+        Size = UDim2.new(0, 160, 0, 160),
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 6) }, artArea)
+
+    self._visualizerBars = {}
+    for i = 1, 16 do
+        local bar = New("Frame", {
+            BackgroundColor3 = C.AccentOrange,
+            BorderSizePixel = 0,
+            Position = UDim2.new(0, (i-1) * 10 + 2, 1, -2),
+            Size = UDim2.new(0, 6, 0, 2),
+            AnchorPoint = Vector2.new(0, 1),
+            ZIndex = 17,
+        }, artArea)
+        New("UICorner", { CornerRadius = UDim.new(0, 2) }, bar)
+        table.insert(self._visualizerBars, bar)
+    end
+
+    self._trackTitle = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 190, 0, 18),
+        Size = UDim2.new(1, -210, 0, 22),
+        Font = Enum.Font.GothamBold,
+        Text = "No Track Loaded",
+        TextColor3 = C.TextPrimary,
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    self._trackArtist = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 190, 0, 44),
+        Size = UDim2.new(1, -210, 0, 18),
+        Font = Enum.Font.Gotham,
+        Text = "Add tracks to playlist",
+        TextColor3 = C.TextSecondary,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local progressBg = New("Frame", {
+        BackgroundColor3 = C.Border,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 190, 0, 75),
+        Size = UDim2.new(1, -210, 0, 4),
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, progressBg)
+
+    self._progressFill = New("Frame", {
+        BackgroundColor3 = C.AccentOrange,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 0, 1, 0),
+        ZIndex = 17,
+    }, progressBg)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, self._progressFill)
+
+    self._timeLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 190, 0, 84),
+        Size = UDim2.new(0, 120, 0, 14),
+        Font = Enum.Font.Gotham,
+        Text = "0:00 / 0:00",
+        TextColor3 = C.TextMuted,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local controlsFrame = New("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 190, 0, 108),
+        Size = UDim2.new(1, -210, 0, 36),
+        ZIndex = 16,
+    }, frame)
+
+    local function makeControl(icon, pos, callback)
+        local btn = New("TextButton", {
+            BackgroundColor3 = C.SurfaceHover,
+            BorderSizePixel = 0,
+            Position = pos,
+            Size = UDim2.new(0, 36, 0, 36),
+            Font = Enum.Font.GothamBold,
+            Text = icon,
+            TextColor3 = C.TextPrimary,
+            TextSize = 14,
+            ZIndex = 17,
+            AutoButtonColor = false,
+        }, controlsFrame)
+        New("UICorner", { CornerRadius = UDim.new(0, 8) }, btn)
+        btn.MouseEnter:Connect(function() Aether.Tween(btn, 0.15, nil, nil, {BackgroundColor3 = C.AccentOrange}) end)
+        btn.MouseLeave:Connect(function() Aether.Tween(btn, 0.15, nil, nil, {BackgroundColor3 = C.SurfaceHover}) end)
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    makeControl("◄◄", UDim2.new(0, 0, 0, 0), function() self:Previous() end)
+    self._playBtn = makeControl("▶", UDim2.new(0, 44, 0, 0), function() self:TogglePlay() end)
+    makeControl("■", UDim2.new(0, 88, 0, 0), function() self:Stop() end)
+    makeControl("►►", UDim2.new(0, 132, 0, 0), function() self:Next() end)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 15, 0, 188),
+        Size = UDim2.new(0, 50, 0, 18),
+        Font = Enum.Font.Gotham,
+        Text = "Volume",
+        TextColor3 = C.TextMuted,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    local volValue = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -55, 0, 188),
+        Size = UDim2.new(0, 40, 0, 18),
+        Font = Enum.Font.Gotham,
+        Text = "50%",
+        TextColor3 = C.TextSecondary,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        ZIndex = 16,
+    }, frame)
+
+    local volTrack = New("Frame", {
+        BackgroundColor3 = C.Border,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 15, 0, 210),
+        Size = UDim2.new(1, -30, 0, 4),
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, volTrack)
+
+    local volFill = New("Frame", {
+        BackgroundColor3 = C.AccentOrange,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0.5, 0, 1, 0),
+        ZIndex = 17,
+    }, volTrack)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, volFill)
+
+    local volThumb = New("Frame", {
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BorderSizePixel = 0,
+        Position = UDim2.new(0.5, -6, 0.5, -6),
+        Size = UDim2.new(0, 12, 0, 12),
+        ZIndex = 18,
+    }, volTrack)
+    New("UICorner", { CornerRadius = UDim.new(1, 0) }, volThumb)
+
+    local volDragging = false
+    local function updateVol(input)
+        local scale = math.clamp((input.Position.X - volTrack.AbsolutePosition.X) / volTrack.AbsoluteSize.X, 0, 1)
+        volFill.Size = UDim2.new(scale, 0, 1, 0)
+        volThumb.Position = UDim2.new(scale, -6, 0.5, -6)
+        volValue.Text = math.floor(scale * 100) .. "%"
+        if self._sound then self._sound.Volume = scale end
+    end
+    volThumb.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then volDragging = true end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then volDragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if volDragging and input.UserInputType == Enum.UserInputType.MouseMovement then updateVol(input) end
+    end)
+    volTrack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then updateVol(input) end
+    end)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 15, 0, 228),
+        Size = UDim2.new(1, -30, 0, 18),
+        Font = Enum.Font.GothamBold,
+        Text = "PLAYLIST",
+        TextColor3 = C.TextMuted,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 16,
+    }, frame)
+
+    self._playlistFrame = New("ScrollingFrame", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 15, 0, 248),
+        Size = UDim2.new(1, -30, 0, 40),
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = C.AccentOrange,
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, self._playlistFrame)
+    New("UIListLayout", { Padding = UDim.new(0, 1) }, self._playlistFrame)
+
+    self._frame = frame
+    self:_startVisualizer()
+    return self
+end
+
+function MusicPlayer:_startVisualizer()
+    local conn = RunService.Heartbeat:Connect(function()
+        if not self._sound or not self._isPlaying then
+            for _, bar in ipairs(self._visualizerBars) do
+                if bar and bar.Parent then
+                    Aether.Tween(bar, 0.1, nil, nil, {Size = UDim2.new(0, 6, 0, 2)})
+                end
+            end
+            return
+        end
+        local loudness = self._sound.PlaybackLoudness or 0
+        for i, bar in ipairs(self._visualizerBars) do
+            if bar and bar.Parent then
+                local height = math.clamp((loudness / 500) * math.random(60, 140) + 3, 2, 150)
+                Aether.Tween(bar, 0.05, nil, nil, {Size = UDim2.new(0, 6, 0, height)})
+            end
+        end
+    end)
+    table.insert(self._connections, conn)
+end
+
+function MusicPlayer:AddTrack(name, artist, soundId)
+    table.insert(self._playlist, {Name = name, Artist = artist, SoundId = soundId})
+    local index = #self._playlist
+
+    local btn = New("TextButton", {
+        BackgroundColor3 = C.Surface,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, -8, 0, 26),
+        Position = UDim2.new(0, 4, 0, 0),
+        Font = Enum.Font.Gotham,
+        Text = "  " .. name .. " — " .. artist,
+        TextColor3 = C.TextSecondary,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 17,
+        AutoButtonColor = false,
+    }, self._playlistFrame)
+
+    btn.MouseEnter:Connect(function() Aether.Tween(btn, 0.15, nil, nil, {BackgroundTransparency = 0.5}) end)
+    btn.MouseLeave:Connect(function() Aether.Tween(btn, 0.15, nil, nil, {BackgroundTransparency = 1}) end)
+    btn.MouseButton1Click:Connect(function() self:LoadTrack(index) end)
+
+    self._playlistFrame.CanvasSize = UDim2.new(0, 0, 0, #self._playlist * 27)
+end
+
+function MusicPlayer:LoadTrack(index)
+    self._currentTrack = index
+    local track = self._playlist[index]
+    if not track then return end
+
+    self._trackTitle.Text = track.Name
+    self._trackArtist.Text = track.Artist
+
+    if self._sound then self._sound:Destroy() end
+
+    self._sound = Instance.new("Sound")
+    self._sound.Parent = SoundService
+    self._sound.SoundId = track.SoundId
+    self._sound.Volume = 0.5
+
+    self._sound.Ended:Connect(function() self:Next() end)
+
+    task.spawn(function()
+        while self._sound and self._sound.Parent do
+            if self._sound.IsPlaying then
+                local current = math.floor(self._sound.TimePosition)
+                local total = math.floor(self._sound.TimeLength)
+                if total > 0 then
+                    self._progressFill.Size = UDim2.new(current / total, 0, 1, 0)
+                    self._timeLabel.Text = string.format("%d:%02d / %d:%02d", math.floor(current/60), current%60, math.floor(total/60), total%60)
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+
+    self:Play()
+end
+
+function MusicPlayer:Play()
+    if self._sound then
+        self._sound:Play()
+        self._isPlaying = true
+        self._playBtn.Text = "⏸"
+    end
+end
+
+function MusicPlayer:Pause()
+    if self._sound then
+        self._sound:Pause()
+        self._isPlaying = false
+        self._playBtn.Text = "▶"
+    end
+end
+
+function MusicPlayer:Stop()
+    if self._sound then
+        self._sound:Stop()
+        self._isPlaying = false
+        self._playBtn.Text = "▶"
+        self._progressFill.Size = UDim2.new(0, 0, 1, 0)
+        self._timeLabel.Text = "0:00 / 0:00"
+    end
+end
+
+function MusicPlayer:TogglePlay()
+    if self._isPlaying then self:Pause() else self:Play() end
+end
+
+function MusicPlayer:Next()
+    if #self._playlist == 0 then return end
+    local next = self._currentTrack + 1
+    if next > #self._playlist then next = 1 end
+    self:LoadTrack(next)
+end
+
+function MusicPlayer:Previous()
+    if #self._playlist == 0 then return end
+    local prev = self._currentTrack - 1
+    if prev < 1 then prev = #self._playlist end
+    self:LoadTrack(prev)
+end
+
+function MusicPlayer:Destroy()
+    for _, conn in ipairs(self._connections) do conn:Disconnect() end
+    if self._sound then self._sound:Destroy() end
+    if self._frame then self._frame:Destroy() end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- FILE BROWSER (INLINE)
+-- ═══════════════════════════════════════════════════════════════════════════════
+local FileBrowser = {}
+FileBrowser.__index = FileBrowser
+
+function FileBrowser.new(parent)
+    local self = setmetatable({}, FileBrowser)
+    self._currentPath = ""
+
+    local frame = New("Frame", {
+        Name = "FileBrowser",
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 320),
+        ZIndex = 15,
+    }, parent)
+    New("UICorner", { CornerRadius = UDim.new(0, 6) }, frame)
+    New("UIStroke", { Color = C.Border, Thickness = 1 }, frame)
+
+    local pathBar = New("Frame", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 12, 0, 12),
+        Size = UDim2.new(1, -56, 0, 30),
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, pathBar)
+
+    self._pathText = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 10, 0, 0),
+        Size = UDim2.new(1, -20, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = "workspace/",
+        TextColor3 = C.TextSecondary,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 17,
+    }, pathBar)
+
+    local refreshBtn = New("TextButton", {
+        BackgroundColor3 = C.SurfaceHover,
+        BorderSizePixel = 0,
+        Position = UDim2.new(1, -38, 0, 12),
+        Size = UDim2.new(0, 26, 0, 30),
+        Font = Enum.Font.GothamBold,
+        Text = "↻",
+        TextColor3 = C.TextPrimary,
+        TextSize = 14,
+        ZIndex = 16,
+        AutoButtonColor = false,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, refreshBtn)
+    refreshBtn.MouseEnter:Connect(function() Aether.Tween(refreshBtn, 0.15, nil, nil, {BackgroundColor3 = C.AccentOrange}) end)
+    refreshBtn.MouseLeave:Connect(function() Aether.Tween(refreshBtn, 0.15, nil, nil, {BackgroundColor3 = C.SurfaceHover}) end)
+
+    self._fileList = New("ScrollingFrame", {
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 12, 0, 52),
+        Size = UDim2.new(1, -24, 1, -64),
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.AccentOrange,
+        ZIndex = 16,
+    }, frame)
+    New("UICorner", { CornerRadius = UDim.new(0, 4) }, self._fileList)
+    New("UIListLayout", { Padding = UDim.new(0, 1) }, self._fileList)
+    New("UIPadding", { PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4), PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4) }, self._fileList)
+
+    self._frame = frame
+    refreshBtn.MouseButton1Click:Connect(function() self:Refresh(self._currentPath) end)
+    self:Refresh("")
+    return self
+end
+
+function FileBrowser:_addEntry(name, isDir, fullPath)
+    local entry = New("TextButton", {
+        BackgroundColor3 = C.Surface,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, -8, 0, 28),
+        Position = UDim2.new(0, 4, 0, 0),
+        Font = Enum.Font.Gotham,
+        Text = (isDir and "📁 " or "📄 ") .. name,
+        TextColor3 = C.TextSecondary,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 17,
+        AutoButtonColor = false,
+    }, self._fileList)
+
+    entry.MouseEnter:Connect(function()
+        Aether.Tween(entry, 0.15, nil, nil, {BackgroundTransparency = 0.5})
+        entry.TextColor3 = C.TextPrimary
+    end)
+    entry.MouseLeave:Connect(function()
+        Aether.Tween(entry, 0.15, nil, nil, {BackgroundTransparency = 1})
+        entry.TextColor3 = C.TextSecondary
+    end)
+    entry.MouseButton1Click:Connect(function()
+        if isDir then
+            self:Refresh(fullPath)
+        else
+            if readfile then
+                local ok, content = pcall(readfile, fullPath)
+                if ok then print("[FileBrowser] Read:", fullPath, "Size:", #content) end
+            end
+        end
+    end)
+end
+
+function FileBrowser:Refresh(path)
+    self._currentPath = path or ""
+    self._pathText.Text = #self._currentPath > 0 and self._currentPath or "workspace/"
+
+    for _, child in ipairs(self._fileList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    if #self._currentPath > 0 then
+        local parentPath = self._currentPath:match("^(.*)[/\\]") or ""
+        self:_addEntry("..", true, parentPath)
+    end
+
+    if listfiles then
+        local success, files = pcall(listfiles, self._currentPath)
+        if success and files then
+            table.sort(files)
+            for _, file in ipairs(files) do
+                local name = file:match("([^/\\]+)$") or file
+                local isDir = false
+                local dirTest = pcall(listfiles, file)
+                if dirTest then isDir = true end
+                self:_addEntry(name, isDir, file)
+            end
+            self._fileList.CanvasSize = UDim2.new(0, 0, 0, (#files + 1) * 29 + 8)
+        end
+    else
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 60),
+            Font = Enum.Font.Gotham,
+            Text = "listfiles() not available\nUse a supported executor (Synapse, KRNL, Fluxus)",
+            TextColor3 = C.TextMuted,
+            TextSize = 11,
+            TextWrapped = true,
+            ZIndex = 17,
+        }, self._fileList)
+    end
+end
+
+function FileBrowser:Destroy()
+    if self._frame then self._frame:Destroy() end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- MAIN WINDOW CLASS
+-- ═══════════════════════════════════════════════════════════════════════════════
+function Aether.new(config)
+    config = config or {}
+    local self = setmetatable({}, Aether)
+    self._connections = {}
+    self._pages = {}
+    self._activePage = nil
+    self._toggleKey = config.ToggleKey or Enum.KeyCode.RightShift
+    self._isVisible = true
+
+    local root = getSafeParent()
+    root.Name = "AetherUI"
+    root.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    root.ResetOnSpawn = false
+
+    local backdrop = New("Frame", {
+        Name = "Backdrop",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        BackgroundTransparency = 1,
+        ZIndex = 0,
+    }, root)
+
+    local shadow = New("ImageLabel", {
+        Name = "Shadow",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(0, 960, 0, 640),
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://6014261993",
+        ImageColor3 = Color3.new(0, 0, 0),
+        ImageTransparency = 0.4,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49, 49, 450, 450),
+        ZIndex = 0,
+    }, root)
+
+    local main = New("Frame", {
+        Name = "Main",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(0, 900, 0, 580),
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+        ZIndex = 5,
+    }, root)
+    New("UICorner", { CornerRadius = UDim.new(0, 8) }, main)
+    New("UIStroke", { Color = C.Border, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, main)
+
+    self._root = root
+    self._main = main
+    self._backdrop = backdrop
+    self._shadow = shadow
+
+    self:_buildTopBar(config)
+    self:_buildLayout()
+    self:_buildStatusBar()
+    self:_setupDrag()
+    self:_setupToggleKey()
+    self:_playIntro()
+
+    return self
+end
+
+function Aether:_buildTopBar(config)
+    local topbar = New("Frame", {
+        Name = "TopBar",
+        Size = UDim2.new(1, 0, 0, 50),
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        ZIndex = 10,
+    }, self._main)
+    New("UICorner", { CornerRadius = UDim.new(0, 8) }, topbar)
+    New("Frame", { Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 1, -8), BackgroundColor3 = C.Surface, BorderSizePixel = 0, ZIndex = 10 }, topbar)
+
+    local gradLine = New("Frame", {
+        Name = "AccentLine",
+        Position = UDim2.new(0, 0, 1, -2),
+        Size = UDim2.new(1, 0, 0, 2),
+        BackgroundColor3 = C.AccentOrange,
+        BorderSizePixel = 0,
+        ZIndex = 11,
+    }, topbar)
+    New("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, C.AccentOrange),
+            ColorSequenceKeypoint.new(0.5, C.AccentPurple),
+            ColorSequenceKeypoint.new(1, C.AccentBlue),
+        }),
+        Rotation = 0,
+    }, gradLine)
+
+    local t = 0
+    table.insert(self._connections, RunService.Heartbeat:Connect(function(dt)
+        t = (t + dt * 0.4) % 1
+        local grad = gradLine:FindFirstChildOfClass("UIGradient")
+        if grad then grad.Offset = Vector2.new(t * 2 - 1, 0) end
+    end))
+
+    New("TextLabel", {
+        Name = "Title",
+        Position = UDim2.new(0, 16, 0, 8),
+        Size = UDim2.new(0, 200, 0, 20),
+        BackgroundTransparency = 1,
+        Text = config and config.Title or "AETHER v2.0",
+        TextColor3 = C.TextPrimary,
+        Font = Enum.Font.GothamBold,
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 11,
+    }, topbar)
+
+    New("TextLabel", {
+        Name = "Subtitle",
+        Position = UDim2.new(0, 16, 0, 28),
+        Size = UDim2.new(0, 200, 0, 14),
+        BackgroundTransparency = 1,
+        Text = config and config.Subtitle or "UI Framework v2.0",
+        TextColor3 = C.TextMuted,
+        Font = Enum.Font.Gotham,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 11,
+    }, topbar)
+
+    local controls = New("Frame", {
+        Name = "Controls",
+        Position = UDim2.new(1, -90, 0, 0),
+        Size = UDim2.new(0, 90, 1, 0),
+        BackgroundTransparency = 1,
+        ZIndex = 11,
+    }, topbar)
+
+    local function makeWinBtn(text, pos, color, callback)
+        local btn = New("TextButton", {
+            Position = UDim2.new(0, pos, 0.5, -10),
+            Size = UDim2.new(0, 20, 0, 20),
+            BackgroundTransparency = 1,
+            Text = text,
+            TextColor3 = C.TextSecondary,
+            Font = Enum.Font.GothamBold,
+            TextSize = 14,
+            ZIndex = 12,
+        }, controls)
+        btn.MouseEnter:Connect(function() Aether.TweenHover(btn, {TextColor3 = color}) end)
+        btn.MouseLeave:Connect(function() Aether.TweenHover(btn, {TextColor3 = C.TextSecondary}) end)
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    makeWinBtn("—", 0, C.Warning, function() self:Minimize() end)
+    makeWinBtn("□", 28, C.Success, function() end)
+    makeWinBtn("✕", 56, C.Danger, function() self:Destroy() end)
+
+    self._topbar = topbar
+end
+
+function Aether:_buildLayout()
+    local body = New("Frame", {
+        Name = "Body",
+        Position = UDim2.new(0, 0, 0, 50),
+        Size = UDim2.new(1, 0, 1, -75),
+        BackgroundTransparency = 1,
+        ZIndex = 6,
+    }, self._main)
+
+    local sidebar = New("Frame", {
+        Name = "Sidebar",
+        Size = UDim2.new(0, 200, 1, 0),
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        ZIndex = 6,
+    }, body)
+    New("UIStroke", { Color = C.Border, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, sidebar)
+
+    New("TextLabel", {
+        Name = "NavLabel",
+        Position = UDim2.new(0, 14, 0, 10),
+        Size = UDim2.new(1, -14, 0, 20),
+        BackgroundTransparency = 1,
+        Text = "NAVIGATION",
+        TextColor3 = C.TextMuted,
+        Font = Enum.Font.GothamBold,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 7,
+    }, sidebar)
+
+    local navList = New("Frame", {
+        Name = "NavList",
+        Position = UDim2.new(0, 0, 0, 38),
+        Size = UDim2.new(1, 0, 1, -38),
+        BackgroundTransparency = 1,
+        ZIndex = 7,
+    }, sidebar)
+    New("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 0) }, navList)
+
+    local contentArea = New("Frame", {
+        Name = "ContentArea",
+        Position = UDim2.new(0, 200, 0, 0),
+        Size = UDim2.new(1, -200, 1, 0),
+        BackgroundTransparency = 1,
+        ZIndex = 6,
+    }, body)
+
+    local pagesFrame = New("Frame", {
+        Name = "Pages",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        ZIndex = 6,
+    }, contentArea)
+
+    self._body = body
+    self._sidebar = sidebar
+    self._navList = navList
+    self._pagesFrame = pagesFrame
+end
+
+function Aether:_buildStatusBar()
+    local bar = New("Frame", {
+        Name = "StatusBar",
+        Position = UDim2.new(0, 0, 1, -25),
+        Size = UDim2.new(1, 0, 0, 25),
+        BackgroundColor3 = C.Surface,
+        BorderSizePixel = 0,
+        ZIndex = 10,
+    }, self._main)
+    New("UICorner", { CornerRadius = UDim.new(0, 8) }, bar)
+    New("Frame", { Size = UDim2.new(1, 0, 0, 8), BackgroundColor3 = C.Surface, BorderSizePixel = 0, ZIndex = 10 }, bar)
+    New("UIStroke", { Color = C.Border, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, bar)
+
+    self._statusLabel = New("TextLabel", {
+        Name = "StatusText",
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(0.5, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "● Ready",
+        TextColor3 = C.Success,
+        Font = Enum.Font.Gotham,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 11,
+    }, bar)
+
+    self._fpsLabel = New("TextLabel", {
+        Name = "FPS",
+        Position = UDim2.new(0.5, 0, 0, 0),
+        Size = UDim2.new(0.5, -12, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "60 FPS",
+        TextColor3 = C.TextMuted,
+        Font = Enum.Font.Code,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        ZIndex = 11,
+    }, bar)
+
+    local lastTime = tick()
+    local frameCount = 0
+    table.insert(self._connections, RunService.Heartbeat:Connect(function()
+        frameCount += 1
+        local now = tick()
+        if now - lastTime >= 1 then
+            if self._fpsLabel and self._fpsLabel.Parent then
+                self._fpsLabel.Text = math.round(frameCount / (now - lastTime)) .. " FPS"
+            end
+            frameCount = 0
+            lastTime = now
+        end
+    end))
+end
+
+function Aether:_setupDrag()
+    local dragging, dragStart, startPos
+    local topbar = self._topbar
+    local main = self._main
+
+    topbar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = main.Position
+        end
+    end)
+
+    topbar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    table.insert(self._connections, UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end))
+end
+
+function Aether:_setupToggleKey()
+    table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if UserInputService:GetFocusedTextBox() then return end
+        if input.KeyCode == self._toggleKey then
+            self:Toggle()
+        end
+    end))
+end
+
+function Aether:_playIntro()
+    local main = self._main
+    local backdrop = self._backdrop
+    local shadow = self._shadow
+    main.Size = UDim2.new(0, 900 * 0.8, 0, 580 * 0.8)
+    main.BackgroundTransparency = 1
+    backdrop.BackgroundTransparency = 1
+    shadow.ImageTransparency = 1
+
+    Aether.Tween(backdrop, 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, { BackgroundTransparency = 0.6 })
+    Aether.Tween(shadow, 0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, { ImageTransparency = 0.4 })
+    Aether.Tween(main, 0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out, {
+        Size = UDim2.new(0, 900, 0, 580),
+        BackgroundTransparency = 0,
+    })
+end
+
+-- ── Add Page ─────────────────────────────────────────────────────────────────
+function Aether:AddPage(name, icon)
+    local pageCount = #self._pages + 1
+
+    local btn = New("TextButton", {
+        Name = "Nav_" .. name,
+        Size = UDim2.new(1, 0, 0, 38),
+        BackgroundColor3 = C.Surface,
+        BackgroundTransparency = 1,
+        Text = "",
+        BorderSizePixel = 0,
+        LayoutOrder = pageCount,
+        ZIndex = 7,
+    }, self._navList)
+
+    local indicator = New("Frame", {
+        Name = "Indicator",
+        Size = UDim2.new(0, 3, 0, 0),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0, 0.5),
+        BackgroundColor3 = C.AccentOrange,
+        BorderSizePixel = 0,
+        ZIndex = 8,
+    }, btn)
+
+    New("TextLabel", {
+        Name = "Icon",
+        Position = UDim2.new(0, 14, 0, 0),
+        Size = UDim2.new(0, 20, 1, 0),
+        BackgroundTransparency = 1,
+        Text = icon or "◈",
+        TextColor3 = C.TextSecondary,
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        ZIndex = 8,
+    }, btn)
+
+    local label = New("TextLabel", {
+        Name = "Label",
+        Position = UDim2.new(0, 42, 0, 0),
+        Size = UDim2.new(1, -42, 1, 0),
+        BackgroundTransparency = 1,
+        Text = name,
+        TextColor3 = C.TextSecondary,
+        Font = Enum.Font.Gotham,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 8,
+    }, btn)
+
+    local page = New("ScrollingFrame", {
+        Name = "Page_" .. name,
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = C.Border,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Visible = false,
+        ZIndex = 6,
+    }, self._pagesFrame)
+
+    New("UIPadding", {
+        PaddingTop = UDim.new(0, 12),
+        PaddingLeft = UDim.new(0, 14),
+        PaddingRight = UDim.new(0, 14),
+        PaddingBottom = UDim.new(0, 12),
+    }, page)
+
+    New("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 10),
+    }, page)
+
+    local pageData = { name = name, frame = page, btn = btn, indicator = indicator, label = label }
+    table.insert(self._pages, pageData)
+
+    btn.MouseEnter:Connect(function()
+        if self._activePage ~= pageData then
+            Aether.TweenHover(btn, { BackgroundTransparency = 0.5 })
+            Aether.TweenHover(label, { TextColor3 = C.TextPrimary })
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        if self._activePage ~= pageData then
+            Aether.TweenHover(btn, { BackgroundTransparency = 1 })
+            Aether.TweenHover(label, { TextColor3 = C.TextSecondary })
+        end
+    end)
+
+    btn.MouseButton1Click:Connect(function()
+        self:SelectPage(pageData)
+    end)
+
+    if pageCount == 1 then
+        self:SelectPage(pageData)
+    end
+
+    return page
+end
+
+function Aether:SelectPage(pageData)
+    if self._activePage then
+        local prev = self._activePage
+        prev.frame.Visible = false
+        Aether.TweenHover(prev.btn, { BackgroundTransparency = 1 })
+        Aether.TweenHover(prev.label, { TextColor3 = C.TextSecondary })
+        Aether.TweenHover(prev.indicator, { Size = UDim2.new(0, 3, 0, 0) })
+        local prevIcon = prev.btn:FindFirstChild("Icon")
+        if prevIcon then Aether.TweenHover(prevIcon, { TextColor3 = C.TextSecondary }) end
+    end
+
+    self._activePage = pageData
+    pageData.frame.Visible = true
+    Aether.TweenHover(pageData.btn, { BackgroundTransparency = 0.3 })
+    Aether.TweenHover(pageData.label, { TextColor3 = C.TextPrimary })
+    Aether.TweenHover(pageData.indicator, { Size = UDim2.new(0, 3, 1, 0) })
+    local icon = pageData.btn:FindFirstChild("Icon")
+    if icon then Aether.TweenHover(icon, { TextColor3 = C.AccentOrange }) end
+
+    self:SetStatus("Tab: " .. pageData.name, C.TextSecondary)
+end
+
+-- ── Utilities ──────────────────────────────────────────────────────────────
+function Aether:SetStatus(text, color)
+    if self._statusLabel then
+        self._statusLabel.Text = "● " .. text
+        self._statusLabel.TextColor3 = color or C.Success
+    end
+end
+
+function Aether:Minimize()
+    if not self._isVisible then return end
+    self._isVisible = false
+
+    local main = self._main
+    local backdrop = self._backdrop
+    local shadow = self._shadow
+
+    self._savedPosition = main.Position
+
+    Aether.Tween(main, 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, {
+        Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset, 1.2, 0),
+        BackgroundTransparency = 1,
+    })
+    Aether.Tween(backdrop, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, { BackgroundTransparency = 1 })
+    Aether.Tween(shadow, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, { ImageTransparency = 1 })
+
+    task.delay(0.3, function() if main then main.Visible = false end end)
+end
+
+function Aether:Toggle()
+    if self._isVisible then
+        self:Minimize()
+    else
+        self._isVisible = true
+        local main = self._main
+        local backdrop = self._backdrop
+        local shadow = self._shadow
+
+        main.Visible = true
+        main.Position = self._savedPosition or UDim2.fromScale(0.5, 0.5)
+        main.BackgroundTransparency = 1
+
+        Aether.Tween(backdrop, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, { BackgroundTransparency = 0.6 })
+        Aether.Tween(shadow, 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, { ImageTransparency = 0.4 })
+        Aether.Tween(main, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out, {
+            Position = self._savedPosition or UDim2.fromScale(0.5, 0.5),
+            BackgroundTransparency = 0,
+        })
+    end
+end
+
+function Aether:Destroy()
+    for _, conn in ipairs(self._connections) do
+        conn:Disconnect()
+    end
+    if self._root then
+        self._root:Destroy()
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- EXPOSE SUB-MODULES
+-- ═══════════════════════════════════════════════════════════════════════════════
+Aether.Elements = Elements
+Aether.MusicPlayer = MusicPlayer
+Aether.FileBrowser = FileBrowser
+
+return Aether
